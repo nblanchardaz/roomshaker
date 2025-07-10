@@ -31,6 +31,9 @@ import serial
 import serial.tools.list_ports
 import struct
 import os
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, 
+NavigationToolbar2Tk)
 
 
 ###############################################################################
@@ -192,13 +195,14 @@ def main():
     ## THIRD ROW
     third_row = create_widget(window, tk.Frame, height=1.5*window.winfo_height()/5, width=window.winfo_width())
     third_row.grid(row=2, column=0)
-    third_row.columnconfigure(0, weight=4)
+    third_row.columnconfigure(0, weight=1)
     third_row.columnconfigure(1, weight=1)
     third_row.columnconfigure(2, weight=1)
     third_row.columnconfigure(3, weight=1)
     third_row.columnconfigure(4, weight=1)
     third_row.columnconfigure(5, weight=1)
-    third_row.columnconfigure(6, weight=4)
+    third_row.columnconfigure(6, weight=1)
+    third_row.columnconfigure(7, weight=10)
     third_row.rowconfigure(0, weight=1)
     # third_row.rowconfigure(1, weight=1)
     # third_row.rowconfigure(3, weight=1)
@@ -297,6 +301,21 @@ def main():
     f4_b2_entry.insert(0, "0.0000000")
     f4_a1_entry.insert(0, "0.0000000")
     f4_a2_entry.insert(0, "0.0000000")
+
+    # Frequency response plot
+    fig = Figure(figsize = (4,2), dpi=100)
+    y = [i**2 for i in range(101)]
+    plot1 = fig.add_subplot(111)
+    plot1.plot(y)
+    canvas = FigureCanvasTkAgg(fig, master = third_row)  
+    canvas.draw()
+    canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
+    # toolbar = NavigationToolbar2Tk(canvas, third_row)
+    # toolbar.update()
+    canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
+
+    # plot = create_widget(third_row, tk.Canvas, bg="grey")
+    # plot.grid(row=1, column=7, rowspan=5)
 
     ## FOURTH ROW
     fourth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
