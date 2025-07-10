@@ -81,7 +81,35 @@ class sport:
         raw = bytearray()
         for val in values:
             raw.extend(struct.pack('f', val))
-        self.ser.write(raw)
+
+        # Split data into two USB packets
+        # The maximum FS USB packet size is 64 bytes. We need to
+        # send 4 * 4 * 5 = 80 bytes. By pre-emptively
+        # splitting the data into two packets, we can control
+        # when/where the data is split and insert our own
+        # headers.
+
+        # BYTE 0: NUMBER OF FILTERS PARAMETERs IN THIS PACKET
+        # BYTE 1: STARTING FILTER INDEX
+        # BYTES 2 to n: FILTER PARAMETERS
+
+        # Filter parameters are stored in an array of size 20.
+        # {b0 b1 b2 a0 a1}, maximum of 4 stages
+        # ...
+
+        # First packet transmission
+        first_msg = bytearray()
+        first_msg.extend(b'\x0A')       # 10 parameters in first message (2 filters)
+        first_msg.extend(b'\x00')       # Start at the 0th index   
+        first_msg.extend(raw[0:39])
+        self.ser.write(first_msg)
+
+        # Second packet transmission
+        second_msg = bytearray()
+        second_msg.extend(b'\x0A')      # 10 parameters in second message (2 filters)
+        second_msg.extend(b'\x28')      # Start at the 40th index   
+        second_msg.extend(raw[40:79])
+        self.ser.write(second_msg)
 
     def enable_autoeq(self):
         
@@ -125,7 +153,7 @@ def main():
     window.minsize(1000, 750)
     window.maxsize(1000, 750)
     window.title("ROOM SHAKER")
-    icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\icon.png"))
+    icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
     window.update()
 
