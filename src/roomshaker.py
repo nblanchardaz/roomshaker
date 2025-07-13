@@ -34,6 +34,9 @@ import os
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, 
 NavigationToolbar2Tk)
+import control
+import numpy as np
+import math
 
 
 ###############################################################################
@@ -131,6 +134,94 @@ class sport:
                 widget.insert(tk.END, data)
 
         window.after(100, lambda:_sport.receive_response(widget))
+
+
+# Class to represent bode plot
+class plot:
+
+    def create(self, parent, toolbar_true, fields):
+
+        # Figure
+        self.fig = Figure(figsize = (4,2), dpi=75)
+
+        # Debug: y values
+        y = [i**2 for i in range(101)]
+
+        # Add figure to plot
+        self.plot1 = self.fig.add_subplot(111)
+
+        # Create curve
+        self.plot1.plot(y)
+
+        # Place in tkinter window
+        self.canvas = FigureCanvasTkAgg(self.fig, master = parent)  
+        self.canvas.draw()
+        self.canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
+
+        # Optional: Add toolbar
+        if (toolbar_true):
+            self.toolbar = NavigationToolbar2Tk(self.canvas, parent)
+            self.toolbar.update()
+            self.toolbar.grid(row=7, column=7, rowspan=1)
+
+        # Save data fields
+        self.data_fields = fields
+
+        # Update plot
+        self.update()
+
+    def update(self):
+
+        # Get biquad parameters
+        try:
+            values = get_values(self.data_fields)
+        except:
+            return
+
+        # Create 4 biquads
+        try:
+            G1 = control.tf(values[3:5], values[0:3])
+            G2 = control.tf(values[8:10], values[5:8])
+            G3 = control.tf(values[13:15], values[10:13])
+            G4 = control.tf(values[18:20], values[15:18])
+        except Exception as e:
+            print("ERROR: Are all 20 coefficients being passed to the plot.update() function? " + e)
+            G1 = control.tf([1, 0, 0],[1, 0, 0])
+            G2 = control.tf([1, 0, 0],[1, 0, 0])
+            G3 = control.tf([1, 0, 0],[1, 0, 0])
+            G4 = control.tf([1, 0, 0],[1, 0, 0])
+
+        # Cascade all 4 biquads
+        G = G1 * G2 * G3 * G4
+
+        # Clear previously plotted curve
+        self.plot1.clear()
+
+        # Create bode plots
+        freq_min = 1
+        freq_max = 20000
+        freq_resolution = 1
+        omega = np.logspace(np.log10(hz_to_rads(freq_min)), np.log10(hz_to_rads(freq_max)), int(hz_to_rads((freq_max-freq_min)/freq_resolution))) # Frequencies from 0.1 to 100 rad/s
+        response = control.frequency_response(G, omega)
+        mag, phase, omega_out = response.magnitude, response.phase, response.omega
+
+        self.plot1.plot(rads_to_hz(omega), mag)
+        
+        window.after(100, _plot.update)
+
+
+def get_values(fields):
+    values = []
+    for field in fields:
+        values.append(float(field.get()))
+    return values
+
+def hz_to_rads(hz):
+    return (hz * math.pi / 180)
+
+def rads_to_hz(rads):
+    return (rads * 180 / math.pi)
+
     
 
 ###############################################################################
@@ -144,6 +235,9 @@ window = tk.Tk()
 # Serial port
 _sport = sport()
 
+# Bode plot
+_plot = plot()
+
 
 ###############################################################################
 ## MAIN FUNCTION
@@ -153,15 +247,15 @@ _sport = sport()
 def main():
 
     ## MAIN WINDOW
-    window.minsize(1000, 750)
-    window.maxsize(1000, 750)
+    window.minsize(950, 650)
+    window.maxsize(1000, 650)
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
     window.update()
 
     ## FIRST ROW
-    first_row = create_widget(window, tk.Frame, height=window.winfo_height()/5, width=window.winfo_width())
+    first_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
     first_row.grid(row=0, column=0)
     first_row.columnconfigure(0, weight=1)
     first_row.columnconfigure(1, weight=1)
@@ -171,14 +265,14 @@ def main():
 
     # Logo
     bg = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\room_shaker_transparent.png"))
-    resize_factor = 0.9 * min(first_row.winfo_width()/bg.width, first_row.winfo_height()/bg.height)
+    resize_factor = 1.0 * min(first_row.winfo_width()/bg.width, first_row.winfo_height()/bg.height)
     img = bg.resize((int(bg.width * resize_factor), int(bg.height * resize_factor)), Image.Resampling.LANCZOS)
     tk_bg = ImageTk.PhotoImage(img)
     image_label = create_widget(first_row, tk.Label, image=tk_bg)
     image_label.grid(row=0, column=1)
 
     ## SECOND ROW
-    second_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
+    second_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
     second_row.grid(row=1, column=0)
     second_row.columnconfigure(0, weight=1)
     second_row.columnconfigure(1, weight=1)
@@ -186,7 +280,7 @@ def main():
     second_row.grid_propagate(False)
     second_row.update()
     chart = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\flow.png"))
-    chart_resize_factor = 0.9 * min(second_row.winfo_width()/chart.width, second_row.winfo_height()/chart.height)
+    chart_resize_factor = 0.8 * min(second_row.winfo_width()/chart.width, second_row.winfo_height()/chart.height)
     chart_img = chart.resize((int(chart.width * chart_resize_factor), int(chart.height * chart_resize_factor)), Image.Resampling.LANCZOS)
     chart_bg = ImageTk.PhotoImage(chart_img)
     chart_label = create_widget(second_row, tk.Label, image=chart_bg)
@@ -195,14 +289,15 @@ def main():
     ## THIRD ROW
     third_row = create_widget(window, tk.Frame, height=1.5*window.winfo_height()/5, width=window.winfo_width())
     third_row.grid(row=2, column=0)
-    third_row.columnconfigure(0, weight=1)
+    third_row.columnconfigure(0, weight=10)
     third_row.columnconfigure(1, weight=1)
     third_row.columnconfigure(2, weight=1)
     third_row.columnconfigure(3, weight=1)
     third_row.columnconfigure(4, weight=1)
     third_row.columnconfigure(5, weight=1)
     third_row.columnconfigure(6, weight=1)
-    third_row.columnconfigure(7, weight=10)
+    third_row.columnconfigure(7, weight=1)
+    third_row.columnconfigure(8, weight=10)
     third_row.rowconfigure(0, weight=1)
     # third_row.rowconfigure(1, weight=1)
     # third_row.rowconfigure(3, weight=1)
@@ -225,7 +320,7 @@ def main():
     a2_label.grid(row=1, column=5)
 
     # Filter 1
-    f1_label = create_widget(third_row, tk.Label, text="Biquad Filter 1", font=("Helvetica", 12, "bold"))
+    f1_label = create_widget(third_row, tk.Label, text="Biquad 1", font=("Helvetica", 12, "bold"))
     f1_label.grid(row=2, column=0)
     f1_b0_entry = create_widget(third_row, tk.Entry, width=10)
     f1_b0_entry.grid(row=2, column=1)
@@ -239,7 +334,7 @@ def main():
     f1_a2_entry.grid(row=2, column=5)
 
     # Filter 2
-    f2_label = create_widget(third_row, tk.Label, text="Biquad Filter 2", font=("Helvetica", 12, "bold"))
+    f2_label = create_widget(third_row, tk.Label, text="Biquad 2", font=("Helvetica", 12, "bold"))
     f2_label.grid(row=3, column=0)
     f2_b0_entry = create_widget(third_row, tk.Entry, width=10)
     f2_b0_entry.grid(row=3, column=1)
@@ -253,7 +348,7 @@ def main():
     f2_a2_entry.grid(row=3, column=5)
 
     # Filter 3
-    f3_label = create_widget(third_row, tk.Label, text="Biquad Filter 3", font=("Helvetica", 12, "bold"))
+    f3_label = create_widget(third_row, tk.Label, text="Biquad 3", font=("Helvetica", 12, "bold"))
     f3_label.grid(row=4, column=0)
     f3_b0_entry = create_widget(third_row, tk.Entry, width=10)
     f3_b0_entry.grid(row=4, column=1)
@@ -267,7 +362,7 @@ def main():
     f3_a2_entry.grid(row=4, column=5)
 
     # Filter 4
-    f4_label = create_widget(third_row, tk.Label, text="Biquad Filter 4", font=("Helvetica", 12, "bold"))
+    f4_label = create_widget(third_row, tk.Label, text="Biquad 4", font=("Helvetica", 12, "bold"))
     f4_label.grid(row=5, column=0)
     f4_b0_entry = create_widget(third_row, tk.Entry, width=10)
     f4_b0_entry.grid(row=5, column=1)
@@ -302,20 +397,8 @@ def main():
     f4_a1_entry.insert(0, "0.0000000")
     f4_a2_entry.insert(0, "0.0000000")
 
-    # Frequency response plot
-    fig = Figure(figsize = (4,2), dpi=100)
-    y = [i**2 for i in range(101)]
-    plot1 = fig.add_subplot(111)
-    plot1.plot(y)
-    canvas = FigureCanvasTkAgg(fig, master = third_row)  
-    canvas.draw()
-    canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
-    # toolbar = NavigationToolbar2Tk(canvas, third_row)
-    # toolbar.update()
-    canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
-
-    # plot = create_widget(third_row, tk.Canvas, bg="grey")
-    # plot.grid(row=1, column=7, rowspan=5)
+    # Create frequency response plot
+    _plot.create(parent=third_row, toolbar_true=False, fields=[f1_b0_entry, f1_b1_entry, f1_b2_entry, f1_a1_entry, f1_a2_entry, f2_b0_entry, f2_b1_entry, f2_b2_entry, f2_a1_entry, f2_a2_entry, f3_b0_entry, f3_b1_entry, f3_b2_entry, f3_a1_entry, f3_a2_entry, f4_b0_entry, f4_b1_entry, f4_b2_entry, f4_a1_entry, f4_a2_entry])
 
     ## FOURTH ROW
     fourth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
@@ -331,7 +414,6 @@ def main():
     # Upload BEQ
     beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=browse_files, font=("Helvetica", 12, "bold"))
     beq.grid(row=1, column=1)
-
 
     ## FIFTH ROW
     fifth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
@@ -382,8 +464,10 @@ def main():
     output.grid(row=1, column=1)
 
     # Checking for received data
-    # window.after(250, _sport.receive_response(output))
     _sport.receive_response(output)
+
+    # Updating frequency response plot
+    _plot.update()
 
     ## BEGIN TKINTER EVENT LOOP
     window.mainloop()
