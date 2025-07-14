@@ -31,12 +31,14 @@ import serial
 import serial.tools.list_ports
 import struct
 import os
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, 
-NavigationToolbar2Tk)
-import control
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from scipy import signal
 import numpy as np
 import math
+import time
+import threading
 
 
 ###############################################################################
@@ -49,7 +51,7 @@ def create_widget(parent, widget_type, **options):
     return widget_type(parent, **options)
 
 # Function for opening the file explorer window to select BEQ file
-def browse_files():
+def browse_files(is_txt):
 
     # Open file explorer
     filename = filedialog.askopenfilename(initialdir = "/", title = "Select a File", filetypes = (("Text files", "*.txt*"), ("all files", "*.*")))
@@ -139,19 +141,13 @@ class sport:
 # Class to represent bode plot
 class plot:
 
+    def __init__(self, fs):
+        self.fs = fs
+
     def create(self, parent, toolbar_true, fields):
 
         # Figure
-        self.fig = Figure(figsize = (4,2), dpi=75)
-
-        # Debug: y values
-        y = [i**2 for i in range(101)]
-
-        # Add figure to plot
-        self.plot1 = self.fig.add_subplot(111)
-
-        # Create curve
-        self.plot1.plot(y)
+        self.fig, self.ax = plt.subplots(figsize=(4, 2), dpi=100)
 
         # Place in tkinter window
         self.canvas = FigureCanvasTkAgg(self.fig, master = parent)  
@@ -180,35 +176,39 @@ class plot:
 
         # Create 4 biquads
         try:
-            G1 = control.tf(values[3:5], values[0:3])
-            G2 = control.tf(values[8:10], values[5:8])
-            G3 = control.tf(values[13:15], values[10:13])
-            G4 = control.tf(values[18:20], values[15:18])
+            W1, H1 = signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
+            W2, H2 = signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=(self.fs/2), fs=self.fs)
+            W3, H3 = signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=(self.fs/2), fs=self.fs)
+            W4, H4 = signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=(self.fs/2), fs=self.fs)
         except Exception as e:
             print("ERROR: Are all 20 coefficients being passed to the plot.update() function? " + e)
-            G1 = control.tf([1, 0, 0],[1, 0, 0])
-            G2 = control.tf([1, 0, 0],[1, 0, 0])
-            G3 = control.tf([1, 0, 0],[1, 0, 0])
-            G4 = control.tf([1, 0, 0],[1, 0, 0])
+            W1, H1 = 0, 0
+            W2, H2 = 0, 0
+            W3, H3 = 0, 0
+            W4, H4 = 0, 0
 
         # Cascade all 4 biquads
-        G = G1 * G2 * G3 * G4
+        H = H1 # * H2 * H3 * H4                             # Multiply frequency responses
+        magnitude_db = 20 * np.log10(abs(H))                # Extract gain in dB
+        # phase_degrees = np.angle(H, deg=True)             # Extract phase in degrees
+        freq_degrees = W1
 
         # Clear previously plotted curve
-        self.plot1.clear()
+        self.ax.clear()
 
         # Create bode plots
-        freq_min = 1
-        freq_max = 20000
-        freq_resolution = 1
-        omega = np.logspace(np.log10(hz_to_rads(freq_min)), np.log10(hz_to_rads(freq_max)), int(hz_to_rads((freq_max-freq_min)/freq_resolution))) # Frequencies from 0.1 to 100 rad/s
-        response = control.frequency_response(G, omega)
-        mag, phase, omega_out = response.magnitude, response.phase, response.omega
+        self.ax.semilogx(freq_degrees[0:500], magnitude_db[0:500])
+        self.ax.set_title("Frequency Response")
+        self.ax.set_xlabel("Frequency (Hz)")
+        self.ax.set_ylabel("Gain (dB)")
+        self.ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
+        self.ax.locator_params(axis='y', nbins=6)
+        plt.tight_layout()
+        self.canvas.draw()
 
-        self.plot1.plot(rads_to_hz(omega), mag)
-        
-        window.after(100, _plot.update)
-
+def plot_loop():
+    while 1:
+        _plot.update()
 
 def get_values(fields):
     values = []
@@ -236,7 +236,7 @@ window = tk.Tk()
 _sport = sport()
 
 # Bode plot
-_plot = plot()
+_plot = plot(fs=48000)  # Sampling frequency = 48kHz
 
 
 ###############################################################################
@@ -277,14 +277,21 @@ def main():
     second_row.columnconfigure(0, weight=1)
     second_row.columnconfigure(1, weight=1)
     second_row.columnconfigure(2, weight=1)
+    second_row.columnconfigure(3, weight=1)
     second_row.grid_propagate(False)
     second_row.update()
     chart = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\flow.png"))
-    chart_resize_factor = 0.8 * min(second_row.winfo_width()/chart.width, second_row.winfo_height()/chart.height)
+    chart_resize_factor = 0.8 * min((second_row.winfo_width()*.75)/chart.width, second_row.winfo_height()/chart.height)
     chart_img = chart.resize((int(chart.width * chart_resize_factor), int(chart.height * chart_resize_factor)), Image.Resampling.LANCZOS)
     chart_bg = ImageTk.PhotoImage(chart_img)
     chart_label = create_widget(second_row, tk.Label, image=chart_bg)
     chart_label.grid(row=0, column=1)
+    bqd = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\biquad.png"))
+    bqd_resize_factor = 1.0 * min((second_row.winfo_width()*.25)/bqd.width, second_row.winfo_height()/bqd.height)
+    bqd_img = bqd.resize((int(bqd.width * bqd_resize_factor), int(bqd.height * bqd_resize_factor)), Image.Resampling.LANCZOS)
+    bqd_bg = ImageTk.PhotoImage(bqd_img)
+    bqd_label = create_widget(second_row, tk.Label, image=bqd_bg)
+    bqd_label.grid(row=0, column=2)
 
     ## THIRD ROW
     third_row = create_widget(window, tk.Frame, height=1.5*window.winfo_height()/5, width=window.winfo_width())
@@ -381,6 +388,11 @@ def main():
     f1_b2_entry.insert(0, "0.0000000")
     f1_a1_entry.insert(0, "0.0000000")
     f1_a2_entry.insert(0, "0.0000000")
+    # f1_b0_entry.insert(0, "0.00001067424")
+    # f1_b1_entry.insert(0, "0.00002134847")
+    # f1_b2_entry.insert(0, "0.00001067424")
+    # f1_a1_entry.insert(0, "-1.99343371333")
+    # f1_a2_entry.insert(0, "0.99347641028")
     f2_b0_entry.insert(0, "1.0000000")
     f2_b1_entry.insert(0, "0.0000000")
     f2_b2_entry.insert(0, "0.0000000")
@@ -407,13 +419,19 @@ def main():
     fourth_row.columnconfigure(0, weight=1)
     fourth_row.columnconfigure(1, weight=1)
     fourth_row.columnconfigure(2, weight=1)
+    fourth_row.columnconfigure(3, weight=1)
     fourth_row.rowconfigure(0, weight=1)
     fourth_row.rowconfigure(1, weight=1)
     fourth_row.rowconfigure(2, weight=1)
+
+    # Upload TXT
+    txt = create_widget(fourth_row, tk.Button, text="Load biquad filters from .txt file...", command=lambda:browse_files(is_txt=True), font=("Helvetica", 12, "bold"))
+    txt.grid(row=1, column=1)
     
     # Upload BEQ
-    beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=browse_files, font=("Helvetica", 12, "bold"))
-    beq.grid(row=1, column=1)
+    beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:browse_files(is_txt=False), font=("Helvetica", 12, "bold"))
+    beq.grid(row=1, column=2)
+    
 
     ## FIFTH ROW
     fifth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
@@ -466,11 +484,13 @@ def main():
     # Checking for received data
     _sport.receive_response(output)
 
-    # Updating frequency response plot
-    _plot.update()
+    # Thread
+    t1 = threading.Thread(target=plot_loop)
+    t1.start()
 
     ## BEGIN TKINTER EVENT LOOP
     window.mainloop()
+    
 
 main()
 
