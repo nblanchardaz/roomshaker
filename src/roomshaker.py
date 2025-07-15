@@ -39,6 +39,7 @@ import numpy as np
 import math
 import time
 import threading
+import csv
 
 
 ###############################################################################
@@ -50,29 +51,53 @@ import threading
 def create_widget(parent, widget_type, **options):
     return widget_type(parent, **options)
 
-# Function for opening the file explorer window to select BEQ file
-def browse_files(is_txt):
 
-    # Open file explorer
-    filename = filedialog.askopenfilename(initialdir = "/", title = "Select a File", filetypes = (("Text files", "*.txt*"), ("all files", "*.*")))
-    
-    # Load biquad filter parameters from file
-    print(filename)
+# Class to load filter parameters from external files
+class floader:
 
-# Function to select and open COM port
-def open_com_port(cbox):
-    ports = serial.tools.list_ports.comports()
-    vals = []
-    for port, desc, hwid in sorted(ports):
-        # print(f"{port}: {desc} [{hwid}]")
-        vals.append(port)
-    cbox['values'] = vals
+    def store_fields(self, fields):
+        self.fields = fields
 
-# Function to upload filters to DSP
+    def set_fields(self, vals):
+        for i in range(len(vals)):
+            if i < len(self.fields):
+                self.fields[i].delete(0, tk.END)
+                self.fields[i].insert(0, vals[i])
+            else:
+                print("ERROR at " + str(vals[i]))
+
+    # Function for opening the file explorer window to select BEQ file
+    def browse_files(self, is_txt):
+
+        # Open file explorer
+        filename = filedialog.askopenfilename(initialdir = "/", title = "Select a File", filetypes = (("Text files", "*.txt*"), ("all files", "*.*")))
+        
+        # Load biquad filter parameters from file
+        data_list = []
+        with open(filename, 'r', newline='') as f:
+            csv_reader = csv.reader(f)
+            for row in csv_reader:
+                for word in row:
+                    data_list.append(word)
+        # print(data_list)
+        self.set_fields(data_list)
+
+
+# Class to interact with the serial port
 class sport:
 
     ser = NONE
 
+    # Function to enumerate available COM ports
+    def open_com_port(self, cbox):
+        ports = serial.tools.list_ports.comports()
+        vals = []
+        for port, desc, hwid in sorted(ports):
+            # print(f"{port}: {desc} [{hwid}]")
+            vals.append(port)
+        cbox['values'] = vals
+
+    # Function to open a specific COM port
     def bind(self, event, portname, buttons):
         if portname != "Select COM Port..." and portname != '':
             try:
@@ -83,6 +108,7 @@ class sport:
             for button in buttons:
                 button["state"] = "active"
 
+    # Function to upload filter parameters over COM port
     def upload_filters(self, values):
         
         # Convert data to bytes
@@ -152,7 +178,7 @@ class plot:
         # Place in tkinter window
         self.canvas = FigureCanvasTkAgg(self.fig, master = parent)  
         self.canvas.draw()
-        self.canvas.get_tk_widget().grid(row=1, column=7, rowspan=5)
+        self.canvas.get_tk_widget().grid(row=0, column=7, rowspan=7)
 
         # Optional: Add toolbar
         if (toolbar_true):
@@ -177,9 +203,9 @@ class plot:
         # Create 4 biquads
         try:
             W1, H1 = signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
-            W2, H2 = signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=(self.fs/2), fs=self.fs)
-            W3, H3 = signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=(self.fs/2), fs=self.fs)
-            W4, H4 = signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=(self.fs/2), fs=self.fs)
+            W2, H2 = signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=int(self.fs/2), fs=self.fs)
+            W3, H3 = signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=int(self.fs/2), fs=self.fs)
+            W4, H4 = signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=int(self.fs/2), fs=self.fs)
         except Exception as e:
             print("ERROR: Are all 20 coefficients being passed to the plot.update() function? " + e)
             W1, H1 = 0, 0
@@ -188,16 +214,16 @@ class plot:
             W4, H4 = 0, 0
 
         # Cascade all 4 biquads
-        H = H1 # * H2 * H3 * H4                             # Multiply frequency responses
+        H = H1 * H2 * H3 * H4                             # Multiply frequency responses
         magnitude_db = 20 * np.log10(abs(H))                # Extract gain in dB
         # phase_degrees = np.angle(H, deg=True)             # Extract phase in degrees
-        freq_degrees = W1
+        freq_degrees = W2
 
         # Clear previously plotted curve
         self.ax.clear()
 
         # Create bode plots
-        self.ax.semilogx(freq_degrees[0:500], magnitude_db[0:500])
+        self.ax.semilogx(freq_degrees[0:100], magnitude_db[0:100])
         self.ax.set_title("Frequency Response")
         self.ax.set_xlabel("Frequency (Hz)")
         self.ax.set_ylabel("Gain (dB)")
@@ -238,6 +264,9 @@ _sport = sport()
 # Bode plot
 _plot = plot(fs=48000)  # Sampling frequency = 48kHz
 
+# File loader
+_floader = floader()
+
 
 ###############################################################################
 ## MAIN FUNCTION
@@ -248,14 +277,14 @@ def main():
 
     ## MAIN WINDOW
     window.minsize(950, 650)
-    window.maxsize(1000, 650)
+    # window.maxsize(1000, 650)
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
     window.update()
 
     ## FIRST ROW
-    first_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
+    first_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width())
     first_row.grid(row=0, column=0)
     first_row.columnconfigure(0, weight=1)
     first_row.columnconfigure(1, weight=1)
@@ -272,29 +301,22 @@ def main():
     image_label.grid(row=0, column=1)
 
     ## SECOND ROW
-    second_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
+    second_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width())
     second_row.grid(row=1, column=0)
     second_row.columnconfigure(0, weight=1)
     second_row.columnconfigure(1, weight=1)
     second_row.columnconfigure(2, weight=1)
-    second_row.columnconfigure(3, weight=1)
     second_row.grid_propagate(False)
     second_row.update()
     chart = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\flow.png"))
-    chart_resize_factor = 0.8 * min((second_row.winfo_width()*.75)/chart.width, second_row.winfo_height()/chart.height)
+    chart_resize_factor = 0.9 * min((second_row.winfo_width()*.75)/chart.width, second_row.winfo_height()/chart.height)
     chart_img = chart.resize((int(chart.width * chart_resize_factor), int(chart.height * chart_resize_factor)), Image.Resampling.LANCZOS)
     chart_bg = ImageTk.PhotoImage(chart_img)
     chart_label = create_widget(second_row, tk.Label, image=chart_bg)
     chart_label.grid(row=0, column=1)
-    bqd = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\biquad.png"))
-    bqd_resize_factor = 1.0 * min((second_row.winfo_width()*.25)/bqd.width, second_row.winfo_height()/bqd.height)
-    bqd_img = bqd.resize((int(bqd.width * bqd_resize_factor), int(bqd.height * bqd_resize_factor)), Image.Resampling.LANCZOS)
-    bqd_bg = ImageTk.PhotoImage(bqd_img)
-    bqd_label = create_widget(second_row, tk.Label, image=bqd_bg)
-    bqd_label.grid(row=0, column=2)
 
     ## THIRD ROW
-    third_row = create_widget(window, tk.Frame, height=1.5*window.winfo_height()/5, width=window.winfo_width())
+    third_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/5, width=window.winfo_width())
     third_row.grid(row=2, column=0)
     third_row.columnconfigure(0, weight=10)
     third_row.columnconfigure(1, weight=1)
@@ -313,6 +335,14 @@ def main():
     third_row.rowconfigure(6, weight=1)
     third_row.grid_propagate(False)
     third_row.update()
+
+    # Biquad expression
+    bqd = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\biquad_transparent.png"))
+    bqd_resize_factor = 1.0 * min((second_row.winfo_width()*.25)/bqd.width, (second_row.winfo_height()*.75)/bqd.height)
+    bqd_img = bqd.resize((int(bqd.width * bqd_resize_factor), int(bqd.height * bqd_resize_factor)), Image.Resampling.LANCZOS)
+    bqd_bg = ImageTk.PhotoImage(bqd_img)
+    bqd_label = create_widget(third_row, tk.Label, image=bqd_bg)
+    bqd_label.grid(row=0, column=1, columnspan=4)
 
     # Labels
     b0_label = create_widget(third_row, tk.Label, text="b0", font=("Helvetica", 12, "bold"))
@@ -425,11 +455,11 @@ def main():
     fourth_row.rowconfigure(2, weight=1)
 
     # Upload TXT
-    txt = create_widget(fourth_row, tk.Button, text="Load biquad filters from .txt file...", command=lambda:browse_files(is_txt=True), font=("Helvetica", 12, "bold"))
+    txt = create_widget(fourth_row, tk.Button, text="Load biquad filters from .txt file...", command=lambda:_floader.browse_files(is_txt=True), font=("Helvetica", 12, "bold"))
     txt.grid(row=1, column=1)
     
     # Upload BEQ
-    beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:browse_files(is_txt=False), font=("Helvetica", 12, "bold"))
+    beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:_floader.browse_files(is_txt=False), font=("Helvetica", 12, "bold"))
     beq.grid(row=1, column=2)
     
 
@@ -460,7 +490,7 @@ def main():
 
     # Select COM Port
     port = tk.StringVar()
-    com = create_widget(fifth_row, ttk.Combobox, textvariable=port, postcommand=lambda:open_com_port(com), font=("Helvetica", 12, "bold"))
+    com = create_widget(fifth_row, ttk.Combobox, textvariable=port, postcommand=lambda:_sport.open_com_port(com), font=("Helvetica", 12, "bold"))
     com.set('Select COM Port...')
     com.bind("<<ComboboxSelected>>", lambda event: _sport.bind(event, port.get(), [upload, autoeq]))
     com.grid(row=1, column=1)
@@ -480,6 +510,9 @@ def main():
     # Text box
     output = create_widget(sixth_row, tk.Text, height=6, width=100)
     output.grid(row=1, column=1)
+
+    # Store entry fields for file loader
+    _floader.store_fields(fields=[f1_b0_entry, f1_b1_entry, f1_b2_entry, f1_a1_entry, f1_a2_entry, f2_b0_entry, f2_b1_entry, f2_b2_entry, f2_a1_entry, f2_a2_entry, f3_b0_entry, f3_b1_entry, f3_b2_entry, f3_a1_entry, f3_a2_entry, f4_b0_entry, f4_b1_entry, f4_b2_entry, f4_a1_entry, f4_a2_entry])
 
     # Checking for received data
     _sport.receive_response(output)
