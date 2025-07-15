@@ -223,7 +223,7 @@ class plot:
         self.ax.clear()
 
         # Create bode plots
-        self.ax.semilogx(freq_degrees[0:100], magnitude_db[0:100])
+        self.ax.semilogx(freq_degrees[0:400], magnitude_db[0:400])
         self.ax.set_title("Frequency Response")
         self.ax.set_xlabel("Frequency (Hz)")
         self.ax.set_ylabel("Gain (dB)")
