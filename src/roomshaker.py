@@ -461,6 +461,7 @@ def main():
     # Upload BEQ
     beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:_floader.browse_files(is_txt=False), font=("Helvetica", 12, "bold"))
     beq.grid(row=1, column=2)
+    beq["state"] = "disabled" # Disable this button until it is fully implemented
     
 
     ## FIFTH ROW
