@@ -228,6 +228,7 @@ class plot:
         self.ax.set_xlabel("Frequency (Hz)")
         self.ax.set_ylabel("Gain (dB)")
         self.ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
+        self.ax.axis([0, 400, -15, 15])
         self.ax.locator_params(axis='y', nbins=6)
         plt.tight_layout()
         self.canvas.draw()
