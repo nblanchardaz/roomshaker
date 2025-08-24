@@ -40,7 +40,13 @@ import math
 import time
 import threading
 import csv
+from ctypes import windll
 
+# Enable DPI awareness for Windows 8.1 and higher
+try:
+    windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass
 
 ###############################################################################
 ## AUXILIARY CLASSES AND FUNCTIONS
@@ -228,7 +234,7 @@ class plot:
         self.ax.set_xlabel("Frequency (Hz)")
         self.ax.set_ylabel("Gain (dB)")
         self.ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
-        self.ax.axis([0, 400, -15, 15])
+        self.ax.axis([1, 400, -15, 15])
         self.ax.locator_params(axis='y', nbins=6)
         plt.tight_layout()
         self.canvas.draw()
@@ -277,12 +283,19 @@ _floader = floader()
 def main():
 
     ## MAIN WINDOW
-    window.minsize(950, 650)
+    screenheight = window.winfo_screenheight()
+    screenwidth = window.winfo_screenwidth()
+    window.minsize(int(0.7*screenwidth), int(0.7*screenheight))
     # window.maxsize(1000, 650)
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
     window.update()
+    window.rowconfigure(0, weight=1)
+    window.rowconfigure(1, weight=1)
+    window.rowconfigure(2, weight=1)
+    window.rowconfigure(3, weight=1)
+    window.columnconfigure(0, weight=1)
 
     ## FIRST ROW
     first_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width())
