@@ -6,13 +6,13 @@
 #
 #   File:               roomshaker.py
 #   Author:             Nick Blanchard
-#   Contact:            nnblanchardaz@gmail.com
+#   Contact:            nblanchardaz@gmail.com
 #   Date:               6/15/2025
 #   Revision:           -
 #   Description:        This file hold source code for the ROOM SHAKER GUI
 #                       application.
 #   Application Notes:  
-#   Known Bugs:
+#   Known Bugs:         Exception raised when the user selects 'cancel' instead of choosing a file to load parameters from.
 #   TODO:
 ###############################################################################
 
@@ -42,11 +42,17 @@ import threading
 import csv
 from ctypes import windll
 
-# Enable DPI awareness for Windows 8.1 and higher
+
+###############################################################################
+## Enable DPI awareness for Windows 8.1 and higher
+###############################################################################
+
+
 try:
     windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
     pass
+
 
 ###############################################################################
 ## AUXILIARY CLASSES AND FUNCTIONS
@@ -88,6 +94,13 @@ class floader:
         # print(data_list)
         self.set_fields(data_list)
 
+    # Function to load a 10dB low shelf with a cutoff at 50 Hz
+    def enable_super_bass(self):
+        params = []
+        for i in range(4):
+            params.extend(create_low_shelf())  
+        self.set_fields(params)
+
 
 # Class to interact with the serial port
 class sport:
@@ -107,6 +120,8 @@ class sport:
     def bind(self, event, portname, buttons):
         if portname != "Select COM Port..." and portname != '':
             try:
+                
+
                 self.ser = serial.Serial(portname, 9600)
             except Exception as e:
                 print(f"An error occurred: {e}")
@@ -129,7 +144,7 @@ class sport:
         # when/where the data is split and insert our own
         # headers.
 
-        # BYTE 0: NUMBER OF FILTERS PARAMETERs IN THIS PACKET
+        # BYTE 0: NUMBER OF FILTERS PARAMETERS IN THIS PACKET
         # BYTE 1: STARTING FILTER INDEX
         # BYTES 2 to n: FILTER PARAMETERS
 
@@ -155,10 +170,9 @@ class sport:
 
     def enable_autoeq(self):
         
-        # Send all 1s to indicate auto EQ mode is enabled
+        # Send 0xDE to indicate auto EQ mode is enabled
         raw = bytearray()
-        for i in range(100):
-            raw.extend((255).to_bytes(1, byteorder='big'))
+        raw.extend(b'\xDE')
         self.ser.write(raw)
 
     def receive_response(self, widget):
@@ -166,7 +180,7 @@ class sport:
         # Check if data has been received
         if isinstance(self.ser, serial.Serial):
             if self.ser.in_waiting > 0:
-                data = str(self.ser.read(self.ser.in_waiting)) + "\n"
+                data = ((str(self.ser.read(self.ser.in_waiting)))[2:-1]).replace("\\n", "\n") + "\n"  # Newline characters that come via serial port are interpreted as literals, hence the need to replace them with true newline characters
                 widget.insert(tk.END, data)
 
         window.after(100, lambda:_sport.receive_response(widget))
@@ -207,9 +221,15 @@ class plot:
             values = get_values(self.data_fields)
         except:
             return
+        
+        # Negate all a coefficients to reverse signs on a-coefficients; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
+        for index in range(len(values)):
+            if (index % 5 == 3 or index % 5 == 4):
+                values[index] = -1*values[index]
 
         # Create 4 biquads
         try:
+            # NOTE: all a coefficients are negated relative to what the Room Shaker gets; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
             W1, H1 = signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
             W2, H2 = signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=int(self.fs/2), fs=self.fs)
             W3, H3 = signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=int(self.fs/2), fs=self.fs)
@@ -257,7 +277,27 @@ def hz_to_rads(hz):
 def rads_to_hz(rads):
     return (rads * 180 / math.pi)
 
+def create_low_shelf(FS=48076, F0=50, SHELF_GAIN_dB=3, S=1):
+    # Modeled after the online Biquad Cookbook
+
+    # Intermediate variables
+    A = 10**(SHELF_GAIN_dB/40)
+    w0 = 2 * math.pi*F0/FS
+    cosw0 = math.cos(w0)
+    sinw0 = math.sin(w0)
+    alpha = (sinw0/2)*math.sqrt((A + 1/A) * (1/S - 1) + 2)
+
+    # Lowshelf filter parameters
+    b0 = A*((A+1)-(A-1)*cosw0+2*math.sqrt(A)*alpha)
+    b1 = 2*A*((A-1)-(A+1)*cosw0)
+    b2 = A*((A+1)-(A-1)*cosw0-2*math.sqrt(A)*alpha)
+    a0 = (A+1)+(A-1)*cosw0+2*math.sqrt(A)*alpha
+    a1 = -1 * (-2*((A-1)+(A+1)*cosw0))                  # Negate to comply with CMSIS-DSP
+    a2 = -1* ((A+1)+(A-1)*cosw0-2*math.sqrt(A)*alpha)   # Negate to comply with CMSIS-DSP
     
+    # Normalize
+    return [b0/a0, b1/a0, b2/a0, a1/a0, a2/a0]
+
 
 ###############################################################################
 ## GLOBAL VARIABLES
@@ -271,7 +311,7 @@ window = tk.Tk()
 _sport = sport()
 
 # Bode plot
-_plot = plot(fs=48000)  # Sampling frequency = 48kHz
+_plot = plot(fs=48076)  # Sampling frequency = 48kHz
 
 # File loader
 _floader = floader()
@@ -288,7 +328,7 @@ def main():
     screenheight = window.winfo_screenheight()
     screenwidth = window.winfo_screenwidth()
     window.minsize(int(0.7*screenwidth), int(0.7*screenheight))
-    # window.maxsize(1000, 650)
+    window.maxsize(int(0.7*screenwidth), int(0.7*screenheight))
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
@@ -462,10 +502,11 @@ def main():
     fourth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
     fourth_row.grid(row=3, column=0)
     fourth_row.grid_propagate(False)
-    fourth_row.columnconfigure(0, weight=1)
+    fourth_row.columnconfigure(0, weight=2)
     fourth_row.columnconfigure(1, weight=1)
     fourth_row.columnconfigure(2, weight=1)
     fourth_row.columnconfigure(3, weight=1)
+    fourth_row.columnconfigure(4, weight=2)
     fourth_row.rowconfigure(0, weight=1)
     fourth_row.rowconfigure(1, weight=1)
     fourth_row.rowconfigure(2, weight=1)
@@ -478,8 +519,11 @@ def main():
     beq = create_widget(fourth_row, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:_floader.browse_files(is_txt=False), font=("Helvetica", 12, "bold"))
     beq.grid(row=1, column=2)
     beq["state"] = "disabled" # Disable this button until it is fully implemented
-    
 
+    # Superbass Mode
+    beq = create_widget(fourth_row, tk.Button, text="Super Bass Mode", command=_floader.enable_super_bass, font=("Helvetica", 12, "bold"))
+    beq.grid(row=1, column=3)
+    
     ## FIFTH ROW
     fifth_row = create_widget(window, tk.Frame, height=window.winfo_height()/10, width=window.winfo_width())
     fifth_row.grid(row=4, column=0)
