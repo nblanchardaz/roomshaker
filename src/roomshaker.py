@@ -156,7 +156,7 @@ class sport:
         first_msg = bytearray()
         first_msg.extend(b'\x0A')       # 10 parameters in first message (2 filters)
         first_msg.extend(b'\x00')       # Start at the 0th index   
-        first_msg.extend(raw[0:39])     # Filter parameters
+        first_msg.extend(raw[0:40])     # Filter parameters
         first_msg.extend(b'\xAA')       # Ending the message with 0xAA indicates to NOT update the stored filter parameters yet, because more are coming
         self.ser.write(first_msg)
 
@@ -164,7 +164,7 @@ class sport:
         second_msg = bytearray()
         second_msg.extend(b'\x0A')      # 10 parameters in second message (2 filters)
         second_msg.extend(b'\x28')      # Start at the 40th index   
-        second_msg.extend(raw[40:79])   # Filter parameters
+        second_msg.extend(raw[40:80])   # Filter parameters
         second_msg.extend(b'\xBB')      # Ending the message with 0xBB indicates to update the stored filter parameters, because all have been sent
         self.ser.write(second_msg)      
 
