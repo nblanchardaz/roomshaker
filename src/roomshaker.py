@@ -587,12 +587,15 @@ def main():
     fourth_row.grid_propagate(False)
     fourth_row.columnconfigure(0, weight=2)
     fourth_row.columnconfigure(1, weight=1)
-    fourth_row.columnconfigure(2, weight=1)
-    fourth_row.columnconfigure(3, weight=1)
-    fourth_row.columnconfigure(4, weight=2)
+    fourth_row.columnconfigure(2, weight=2)
     fourth_row.rowconfigure(0, weight=1)
     fourth_row.rowconfigure(1, weight=1)
     fourth_row.rowconfigure(2, weight=1)
+
+    # Filter configurator
+    configurator = create_widget(fourth_row, tk.Button, text="Generate new filter parameters...", font=("Helvetica", 12, "bold"))
+    configurator.grid(row=1, column=1)
+    configurator["state"] = "disabled" # Disable this button until it is fully implemented
 
     ## FIFTH ROW
     fifth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/40, width=window.winfo_width(), bg="orange")
