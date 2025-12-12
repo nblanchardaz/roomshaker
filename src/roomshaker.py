@@ -54,6 +54,15 @@ except Exception:
     pass
 
 
+
+###############################################################################
+## AUXILIARY CLASSES AND FUNCTIONS
+###############################################################################
+
+
+coefs = []
+
+
 ###############################################################################
 ## AUXILIARY CLASSES AND FUNCTIONS
 ###############################################################################
@@ -92,10 +101,11 @@ class floader:
     def set_all_fields(self, vals):
 
         # For each filter we have
-        for i in range(self.num_filters):
+        for i in range(len(vals)):
             
-            # Set the fields for this filter
-            self.set_single_filter_fields(vals[i], self.fields[i])
+            if (len(vals[i]) == len(self.fields[i])):
+                # Set the fields for this filter
+                self.set_single_filter_fields(vals[i], self.fields[i])
 
     # Function for opening the file explorer window to select BEQ file
     def browse_files(self, is_txt, is_single, filter_index=0):
@@ -216,6 +226,7 @@ class plot:
 
     def __init__(self, fs):
         self.fs = fs
+        self.previous_coefs = []
 
     def create(self, parent, toolbar_true, fields):
 
@@ -244,15 +255,20 @@ class plot:
         self.data_fields = fields
 
         # Update plot
-        self.update()
+        # self.update()
 
-    def update(self):
+    def update(self, entries):
 
         # Get biquad parameters
-        try:
-            values = get_values(self.data_fields)
-        except:
+        values = get_vals(entries)
+
+        # Check for a change
+        if (self.previous_coefs == values):
+            window.after(250, self.update, entries)
             return
+            
+        # Store for next check
+        self.previous_coefs = values
         
         # Negate all a coefficients to reverse signs on a-coefficients; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
         for index in range(len(values)):
@@ -304,15 +320,11 @@ class plot:
         # plt.tight_layout()
         self.phase_canvas.draw()
 
-def plot_loop():
-    while 1:
-        _plot.update()
+        window.after(250, self.update, entries)
 
-def get_values(fields):
-    values = []
-    for field in fields:
-        values.append(float(field.get()))
-    return values
+# def plot_loop():
+#     while 1:
+#         _plot.update()
 
 def hz_to_rads(hz):
     return (hz * math.pi / 180)
@@ -341,6 +353,15 @@ def create_low_shelf(FS=48076, F0=50, SHELF_GAIN_dB=3, S=1):
     
     # Normalize
     return [b0/a0, b1/a0, b2/a0, a1/a0, a2/a0]
+
+def get_vals(entries):
+    # Retrieve values from Tkinter fields
+    values = []
+    for i in range(len(entries)):
+        for j in range(len(entries[i])):
+            values.append(float(entries[i][j].get()))
+
+    return values
 
 
 ###############################################################################
@@ -418,7 +439,7 @@ def main():
     chart_label.grid(row=0, column=1)
 
     ## THIRD ROW
-    third_row = create_widget(window, tk.Frame, height=5*window.winfo_height()/10, width=window.winfo_width()) # bg="green"
+    third_row = create_widget(window, tk.Frame, height=10*window.winfo_height()/20, width=window.winfo_width()) # bg="green"
     third_row.grid(row=2, column=0, sticky="nsew")
     third_row.columnconfigure(0, weight=5)
     third_row.columnconfigure(1, weight=1)
@@ -430,15 +451,9 @@ def main():
     third_row.columnconfigure(7, weight=1)
     third_row.columnconfigure(8, weight=1)
     third_row.columnconfigure(9, weight=5)
-    third_row.columnconfigure(10, weight=10)
-    third_row.rowconfigure(0, weight=10)
-    third_row.rowconfigure(1, weight=1)
-    third_row.rowconfigure(3, weight=1)
-    third_row.rowconfigure(4, weight=1)
-    third_row.rowconfigure(5, weight=1)
-    third_row.rowconfigure(6, weight=10)
-    third_row.grid_propagate(False)
-    third_row.update()
+    third_row.columnconfigure(10, weight=5)
+    # third_row.grid_propagate(False)
+    # third_row.update()
 
     # Biquad expression
     bqd = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\biquad_transparent.png"))
@@ -460,105 +475,53 @@ def main():
     a2_label = create_widget(third_row, tk.Label, text="a2", font=("Helvetica", 12, "bold"))
     a2_label.grid(row=1, column=6)
 
-    # Filter 1
-    f1_label = create_widget(third_row, tk.Label, text="Biquad 1", font=("Helvetica", 12, "bold"))
-    f1_label.grid(row=2, column=1)
-    f1_b0_entry = create_widget(third_row, tk.Entry, width=10)
-    f1_b0_entry.grid(row=2, column=2)
-    f1_b1_entry = create_widget(third_row, tk.Entry, width=10)
-    f1_b1_entry.grid(row=2, column=3)
-    f1_b2_entry = create_widget(third_row, tk.Entry, width=10)
-    f1_b2_entry.grid(row=2, column=4)
-    f1_a1_entry = create_widget(third_row, tk.Entry, width=10)
-    f1_a1_entry.grid(row=2, column=5)
-    f1_a2_entry = create_widget(third_row, tk.Entry, width=10)
-    f1_a2_entry.grid(row=2, column=6)
-    f1_txt = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=0), font=("Helvetica", 10, "bold"))
-    f1_txt.grid(row=2, column=7)
+    # Store labels and entry fields
+    labels = []     # List
+    entries = []    # List of lists
+    load_buttons = []   # List
 
-    # Filter 2
-    f2_label = create_widget(third_row, tk.Label, text="Biquad 2", font=("Helvetica", 12, "bold"))
-    f2_label.grid(row=3, column=1)
-    f2_b0_entry = create_widget(third_row, tk.Entry, width=10)
-    f2_b0_entry.grid(row=3, column=2)
-    f2_b1_entry = create_widget(third_row, tk.Entry, width=10)
-    f2_b1_entry.grid(row=3, column=3)
-    f2_b2_entry = create_widget(third_row, tk.Entry, width=10)
-    f2_b2_entry.grid(row=3, column=4)
-    f2_a1_entry = create_widget(third_row, tk.Entry, width=10)
-    f2_a1_entry.grid(row=3, column=5)
-    f2_a2_entry = create_widget(third_row, tk.Entry, width=10)
-    f2_a2_entry.grid(row=3, column=6)
-    f2_txt = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=1), font=("Helvetica", 10, "bold"))
-    f2_txt.grid(row=3, column=7)
+    # Number of filters and parameters per filter
+    num_filters=8
+    num_parameters=5
 
-    # Filter 3
-    f3_label = create_widget(third_row, tk.Label, text="Biquad 3", font=("Helvetica", 12, "bold"))
-    f3_label.grid(row=4, column=1)
-    f3_b0_entry = create_widget(third_row, tk.Entry, width=10)
-    f3_b0_entry.grid(row=4, column=2)
-    f3_b1_entry = create_widget(third_row, tk.Entry, width=10)
-    f3_b1_entry.grid(row=4, column=3)
-    f3_b2_entry = create_widget(third_row, tk.Entry, width=10)
-    f3_b2_entry.grid(row=4, column=4)
-    f3_a1_entry = create_widget(third_row, tk.Entry, width=10)
-    f3_a1_entry.grid(row=4, column=5)
-    f3_a2_entry = create_widget(third_row, tk.Entry, width=10)
-    f3_a2_entry.grid(row=4, column=6)
-    f3_txt = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=2), font=("Helvetica", 10, "bold"))
-    f3_txt.grid(row=4, column=7)
+    # Configure rows to support the correct number of filters
+    third_row.rowconfigure(0, weight=1)
+    for i in range(1, num_filters+3):
+        third_row.rowconfigure(i, weight=1)
+    third_row.rowconfigure(num_filters+2, weight=10)
+    # third_row.update()
 
-    # Filter 4
-    f4_label = create_widget(third_row, tk.Label, text="Biquad 4", font=("Helvetica", 12, "bold"))
-    f4_label.grid(row=5, column=1)
-    f4_b0_entry = create_widget(third_row, tk.Entry, width=10)
-    f4_b0_entry.grid(row=5, column=2)
-    f4_b1_entry = create_widget(third_row, tk.Entry, width=10)
-    f4_b1_entry.grid(row=5, column=3)
-    f4_b2_entry = create_widget(third_row, tk.Entry, width=10)
-    f4_b2_entry.grid(row=5, column=4)
-    f4_a1_entry = create_widget(third_row, tk.Entry, width=10)
-    f4_a1_entry.grid(row=5, column=5)
-    f4_a2_entry = create_widget(third_row, tk.Entry, width=10)
-    f4_a2_entry.grid(row=5, column=6)
-    f4_txt = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=3), font=("Helvetica", 10, "bold"))
-    f4_txt.grid(row=5, column=7)
+    # Generate all of the labels and input fields
+    for i in range(num_filters):
+        row=i+2
+        e = create_widget(third_row, tk.Label, text=("Biquad " + str(i)), font=("Helvetica", 12, "bold"))
+        e.grid(row=row, column=1)
+        labels.append(e)
+        entries.append([])
+        for j in range(num_parameters):
+            e = create_widget(third_row, tk.Entry, width=10)
+            e.grid(row=row, column=j+2)
+            entries[i].append(e)
+        e = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=i), font=("Helvetica", 10, "bold"))
+        e.grid(row=row, column=num_parameters+2)
+        load_buttons.append(e)
 
-    # Default filter values
-    f1_b0_entry.insert(0, "1.0000000")
-    f1_b1_entry.insert(0, "0.0000000")
-    f1_b2_entry.insert(0, "0.0000000")
-    f1_a1_entry.insert(0, "0.0000000")
-    f1_a2_entry.insert(0, "0.0000000")
-    # f1_b0_entry.insert(0, "0.00001067424")
-    # f1_b1_entry.insert(0, "0.00002134847")
-    # f1_b2_entry.insert(0, "0.00001067424")
-    # f1_a1_entry.insert(0, "-1.99343371333")
-    # f1_a2_entry.insert(0, "0.99347641028")
-    f2_b0_entry.insert(0, "1.0000000")
-    f2_b1_entry.insert(0, "0.0000000")
-    f2_b2_entry.insert(0, "0.0000000")
-    f2_a1_entry.insert(0, "0.0000000")
-    f2_a2_entry.insert(0, "0.0000000")
-    f3_b0_entry.insert(0, "1.0000000")
-    f3_b1_entry.insert(0, "0.0000000")
-    f3_b2_entry.insert(0, "0.0000000")
-    f3_a1_entry.insert(0, "0.0000000")
-    f3_a2_entry.insert(0, "0.0000000")
-    f4_b0_entry.insert(0, "1.0000000")
-    f4_b1_entry.insert(0, "0.0000000")
-    f4_b2_entry.insert(0, "0.0000000")
-    f4_a1_entry.insert(0, "0.0000000")
-    f4_a2_entry.insert(0, "0.0000000")
+    # Set default values for all filters
+    for i in range(0, num_filters):
+        for j in range(num_parameters):
+            if (j == 0):
+                entries[i][j].insert(0, "1.0000000")
+            else:
+                entries[i][j].insert(0, "0.0000000")
 
     # Create frequency response plot
     freq_plot_container = create_widget(third_row, tk.Frame, height=2*window.winfo_height()/5) # bg="grey"
-    freq_plot_container.grid(row=0, column=9, rowspan=7, sticky="nsew")
-    _plot.create(parent=freq_plot_container, toolbar_true=False, fields=[f1_b0_entry, f1_b1_entry, f1_b2_entry, f1_a1_entry, f1_a2_entry, f2_b0_entry, f2_b1_entry, f2_b2_entry, f2_a1_entry, f2_a2_entry, f3_b0_entry, f3_b1_entry, f3_b2_entry, f3_a1_entry, f3_a2_entry, f4_b0_entry, f4_b1_entry, f4_b2_entry, f4_a1_entry, f4_a2_entry])
+    freq_plot_container.grid(row=0, column=9, rowspan=num_filters+4, sticky="nsew")
+    _plot.create(parent=freq_plot_container, toolbar_true=False, fields=entries)
 
     # Quick options
     quick_options_container = create_widget(third_row, tk.Frame,  height=3*window.winfo_height()/40)
-    quick_options_container.grid(row=6, column=1, columnspan=7, sticky="nsew")
+    quick_options_container.grid(row=num_filters+2, column=1, columnspan=7, sticky="nsew")
     quick_options_container.rowconfigure(0, weight=3)
     quick_options_container.rowconfigure(1, weight=1)
     quick_options_container.rowconfigure(2, weight=3)
@@ -610,10 +573,10 @@ def main():
     fifth_row.rowconfigure(1, weight=1)
     fifth_row.rowconfigure(2, weight=1)
     fifth_row.grid_propagate(False)
-    fifth_row.update()
+    # fifth_row.update()
 
     # Upload Filters
-    upload = create_widget(fifth_row, tk.Button, text="Upload Filters", command=lambda:_sport.upload_filters([float(f1_b0_entry.get()), float(f1_b1_entry.get()), float(f1_b2_entry.get()), float(f1_a1_entry.get()), float(f1_a2_entry.get()), float(f2_b0_entry.get()), float(f2_b1_entry.get()), float(f2_b2_entry.get()), float(f2_a1_entry.get()), float(f2_a2_entry.get()), float(f3_b0_entry.get()), float(f3_b1_entry.get()), float(f3_b2_entry.get()), float(f3_a1_entry.get()), float(f3_a2_entry.get()), float(f4_b0_entry.get()), float(f4_b1_entry.get()), float(f4_b2_entry.get()), float(f4_a1_entry.get()), float(f4_a2_entry.get())]), font=("Helvetica", 12, "bold"))
+    upload = create_widget(fifth_row, tk.Button, text="Upload Filters", command=lambda:_sport.upload_filters(get_values(entries)), font=("Helvetica", 12, "bold"))
     upload["state"] = "disabled"
     upload.grid(row=1, column=2)
 
@@ -639,21 +602,23 @@ def main():
     sixth_row.rowconfigure(1, weight=1)
     sixth_row.rowconfigure(2, weight=1)
     sixth_row.grid_propagate(False)
-    sixth_row.update()
+    # sixth_row.update()
 
     # Text box
     output = create_widget(sixth_row, tk.Text, height=6, width=100)
     output.grid(row=1, column=1)
 
     # Store entry fields for file loader
-    _floader.store_fields(fields=[[f1_b0_entry, f1_b1_entry, f1_b2_entry, f1_a1_entry, f1_a2_entry], [f2_b0_entry, f2_b1_entry, f2_b2_entry, f2_a1_entry, f2_a2_entry], [f3_b0_entry, f3_b1_entry, f3_b2_entry, f3_a1_entry, f3_a2_entry], [f4_b0_entry, f4_b1_entry, f4_b2_entry, f4_a1_entry, f4_a2_entry]])
+    _floader.store_fields(fields=entries)
 
     # Checking for received data
     _sport.receive_response(output)
 
     # Thread
-    t1 = threading.Thread(target=plot_loop)
-    t1.start()
+    # t1 = threading.Thread(target=plot_loop)
+    # t1.start()
+
+    window.after(250, _plot.update, entries)
 
     ## BEGIN TKINTER EVENT LOOP
     window.mainloop()
