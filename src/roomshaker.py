@@ -283,9 +283,9 @@ class plot:
             W4, H4 = 0, 0
 
         # Cascade all 4 biquads
-        H = H1 * H2 * H3 * H4                             # Multiply frequency responses
-        magnitude_db = 20 * np.log10(abs(H))                # Extract gain in dB
-        phase_degrees = np.angle(H, deg=True)             # Extract phase in degrees
+        H = H1 * H2 * H3 * H4                                                   # Multiply frequency responses
+        magnitude_db = 20 * np.log10(abs(H))                                    # Extract gain in dB
+        phase_degrees = np.unwrap(np.angle(H, deg=False)) * 360/( 2*math.pi)    # Extract phase in degrees
         freq_degrees = W1
 
         # Clear previously plotted curve
@@ -308,7 +308,7 @@ class plot:
         self.ax[1].set_xlabel("Frequency (Hz)")
         self.ax[1].set_ylabel("Phase (Degrees)")
         self.ax[1].xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
-        self.ax[1].axis([1, 400, -180, 180])
+        # self.ax[1].axis([1, 400, -180, 180])
         self.ax[1].locator_params(axis='y', nbins=6)
         # plt.tight_layout()
         self.canvas.draw()
