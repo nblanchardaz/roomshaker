@@ -54,7 +54,6 @@ except Exception:
     pass
 
 
-
 ###############################################################################
 ## AUXILIARY CLASSES AND FUNCTIONS
 ###############################################################################
@@ -130,11 +129,11 @@ class floader:
             self.set_all_fields(data_list)
 
     # Function to load a 10dB low shelf with a cutoff at 50 Hz
-    def enable_super_bass(self):
+    def enable_super_bass(self, num_filters):
         params = []
-        for i in range(4):
-            params.extend(create_low_shelf())  
-        self.set_fields(params)
+        for i in range(num_filters):
+            params.append(create_low_shelf())  
+        self.set_all_fields(params)
 
 
 # Class to interact with the serial port
@@ -231,19 +230,15 @@ class plot:
     def create(self, parent, toolbar_true, fields):
 
         # Figure
-        self.fig, self.ax = plt.subplots(figsize=(4, 2), dpi=100)
-        self.phase_fig, self.phase_ax = plt.subplots(figsize=(4,2), dpi=100)
+        plt.rcParams.update({'font.size': 8})
+        screen_dpi = window.winfo_fpixels('1i')
+        self.fig, self.ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(parent.winfo_width()/(screen_dpi), parent.winfo_height()/(screen_dpi)), dpi=screen_dpi)
 
         # Place in tkinter window
         self.fig.set_layout_engine('constrained')
         self.canvas = FigureCanvasTkAgg(self.fig, master = parent)  
         self.canvas.draw()
-        self.canvas.get_tk_widget().pack(pady=10)
-
-        self.phase_fig.set_layout_engine('constrained')
-        self.phase_canvas = FigureCanvasTkAgg(self.phase_fig, master = parent)  
-        self.phase_canvas.draw()
-        self.phase_canvas.get_tk_widget().pack(pady=10)
+        self.canvas.get_tk_widget().pack(pady=0)
 
         # Optional: Add toolbar
         if (toolbar_true):
@@ -254,9 +249,6 @@ class plot:
         # Save data fields
         self.data_fields = fields
 
-        # Update plot
-        # self.update()
-
     def update(self, entries):
 
         # Get biquad parameters
@@ -265,10 +257,11 @@ class plot:
         # Check for a change
         if (self.previous_coefs == values):
             window.after(250, self.update, entries)
+            self.previous_coefs = list(values)
             return
             
         # Store for next check
-        self.previous_coefs = values
+        self.previous_coefs = list(values)
         
         # Negate all a coefficients to reverse signs on a-coefficients; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
         for index in range(len(values)):
@@ -296,29 +289,29 @@ class plot:
         freq_degrees = W1
 
         # Clear previously plotted curve
-        self.ax.clear()
-        self.phase_ax.clear()
+        self.ax[0].clear()
+        self.ax[1].clear()
 
         # Create bode plots
-        self.ax.semilogx(freq_degrees[0:400], magnitude_db[0:400])
-        self.ax.set_title("Filter Frequency Response")
-        self.ax.set_xlabel("Frequency (Hz)")
-        self.ax.set_ylabel("Gain (dB)")
-        self.ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
-        self.ax.axis([1, 400, -15, 15])
-        self.ax.locator_params(axis='y', nbins=6)
+        self.ax[0].semilogx(freq_degrees[0:400], magnitude_db[0:400])
+        self.ax[0].set_title("Filter Frequency Response")
+        # self.ax[0].set_xlabel("Frequency (Hz)")
+        self.ax[0].set_ylabel("Gain (dB)")
+        # self.ax[0].xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
+        self.ax[0].axis([1, 400, -15, 15])
+        self.ax[0].locator_params(axis='y', nbins=6)
         # plt.tight_layout()
         self.canvas.draw()
 
-        self.phase_ax.semilogx(freq_degrees[0:400], phase_degrees[0:400])
-        self.phase_ax.set_title("Filter Phase Response")
-        self.phase_ax.set_xlabel("Frequency (Hz)")
-        self.phase_ax.set_ylabel("Phase (Degrees)")
-        self.phase_ax.xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
-        self.phase_ax.axis([1, 400, -180, 180])
-        self.phase_ax.locator_params(axis='y', nbins=6)
+        self.ax[1].semilogx(freq_degrees[0:400], phase_degrees[0:400])
+        # self.ax[1].set_title("Filter Phase Response")
+        self.ax[1].set_xlabel("Frequency (Hz)")
+        self.ax[1].set_ylabel("Phase (Degrees)")
+        self.ax[1].xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
+        self.ax[1].axis([1, 400, -180, 180])
+        self.ax[1].locator_params(axis='y', nbins=6)
         # plt.tight_layout()
-        self.phase_canvas.draw()
+        self.canvas.draw()
 
         window.after(250, self.update, entries)
 
@@ -407,7 +400,7 @@ def main():
     window.columnconfigure(0, weight=1)
 
     ## FIRST ROW
-    first_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width(), bg="blue")
+    first_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width())
     first_row.grid(row=0, column=0)
     first_row.columnconfigure(0, weight=1)
     first_row.columnconfigure(1, weight=1)
@@ -424,7 +417,7 @@ def main():
     image_label.grid(row=0, column=1)
 
     ## SECOND ROW
-    second_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width(), bg="red")
+    second_row = create_widget(window, tk.Frame, height=2*window.winfo_height()/20, width=window.winfo_width())
     second_row.grid(row=1, column=0)
     second_row.columnconfigure(0, weight=1)
     second_row.columnconfigure(1, weight=1)
@@ -441,7 +434,7 @@ def main():
     ## THIRD ROW
     third_row = create_widget(window, tk.Frame, height=10*window.winfo_height()/20, width=window.winfo_width()) # bg="green"
     third_row.grid(row=2, column=0, sticky="nsew")
-    third_row.columnconfigure(0, weight=5)
+    third_row.columnconfigure(0, weight=1)
     third_row.columnconfigure(1, weight=1)
     third_row.columnconfigure(2, weight=1)
     third_row.columnconfigure(3, weight=1)
@@ -450,10 +443,10 @@ def main():
     third_row.columnconfigure(6, weight=1)
     third_row.columnconfigure(7, weight=1)
     third_row.columnconfigure(8, weight=1)
-    third_row.columnconfigure(9, weight=5)
-    third_row.columnconfigure(10, weight=5)
-    # third_row.grid_propagate(False)
-    # third_row.update()
+    third_row.columnconfigure(9, weight=20)
+    third_row.columnconfigure(10, weight=1)
+    third_row.grid_propagate(False)
+    third_row.update()
 
     # Biquad expression
     bqd = Image.open(os.path.join(os.path.dirname(__file__), "imgs\\biquad_transparent.png"))
@@ -481,7 +474,7 @@ def main():
     load_buttons = []   # List
 
     # Number of filters and parameters per filter
-    num_filters=8
+    num_filters=6
     num_parameters=5
 
     # Configure rows to support the correct number of filters
@@ -515,8 +508,10 @@ def main():
                 entries[i][j].insert(0, "0.0000000")
 
     # Create frequency response plot
-    freq_plot_container = create_widget(third_row, tk.Frame, height=2*window.winfo_height()/5) # bg="grey"
-    freq_plot_container.grid(row=0, column=9, rowspan=num_filters+4, sticky="nsew")
+    freq_plot_container = create_widget(third_row, tk.Frame, bg="pink") # bg="grey"
+    freq_plot_container.grid(row=0, column=9, rowspan=num_filters+3, sticky="nsew")
+    freq_plot_container.pack_propagate(False)
+    window.update_idletasks()
     _plot.create(parent=freq_plot_container, toolbar_true=False, fields=entries)
 
     # Quick options
@@ -528,40 +523,39 @@ def main():
     quick_options_container.columnconfigure(0, weight=3)
     quick_options_container.columnconfigure(1, weight=1)
     quick_options_container.columnconfigure(2, weight=1)
-    quick_options_container.columnconfigure(3, weight=1)
-    quick_options_container.columnconfigure(0, weight=3)
+    quick_options_container.columnconfigure(3, weight=3)
 
     # Upload TXT
-    txt = create_widget(quick_options_container, tk.Button, text="Load all biquad filters from .txt file...", command=lambda:_floader.browse_files(is_txt=True, is_single=False), font=("Helvetica", 12, "bold"))
+    txt = create_widget(quick_options_container, tk.Button, text="Load all from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=False), font=("Helvetica", 12, "bold"))
     txt.grid(row=1, column=1)
     
     # Upload BEQ
-    beq = create_widget(quick_options_container, tk.Button, text="Load biquad filters from BEQDesigner file...", command=lambda:_floader.browse_files(is_txt=False, is_single=False), font=("Helvetica", 12, "bold"))
-    beq.grid(row=1, column=2)
-    beq["state"] = "disabled" # Disable this button until it is fully implemented
+    # beq = create_widget(quick_options_container, tk.Button, text="Load from BEQDesigner file...", command=lambda:_floader.browse_files(is_txt=False, is_single=False), font=("Helvetica", 12, "bold"))
+    # beq.grid(row=1, column=2)
+    # beq["state"] = "disabled" # Disable this button until it is fully implemented
+
+    # Filter configurator
+    configurator = create_widget(quick_options_container, tk.Button, text="Generate new filter..", font=("Helvetica", 12, "bold"))
+    configurator.grid(row=1, column=2)
+    configurator["state"] = "disabled" # Disable this button until it is fully implemented
 
     # Superbass Mode
-    beq = create_widget(quick_options_container, tk.Button, text="Super Bass Mode", command=_floader.enable_super_bass, font=("Helvetica", 12, "bold"))
+    beq = create_widget(quick_options_container, tk.Button, text="Super Bass Mode", command=lambda:_floader.enable_super_bass(len(entries)), font=("Helvetica", 12, "bold"))
     beq.grid(row=1, column=3)
 
     ## FOURTH ROW
-    fourth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/40, width=window.winfo_width(), bg="purple")
-    fourth_row.grid(row=3, column=0)
-    fourth_row.grid_propagate(False)
-    fourth_row.columnconfigure(0, weight=2)
-    fourth_row.columnconfigure(1, weight=1)
-    fourth_row.columnconfigure(2, weight=2)
-    fourth_row.rowconfigure(0, weight=1)
-    fourth_row.rowconfigure(1, weight=1)
-    fourth_row.rowconfigure(2, weight=1)
-
-    # Filter configurator
-    configurator = create_widget(fourth_row, tk.Button, text="Generate new filter parameters...", font=("Helvetica", 12, "bold"))
-    configurator.grid(row=1, column=1)
-    configurator["state"] = "disabled" # Disable this button until it is fully implemented
+    # fourth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/40, width=window.winfo_width())
+    # fourth_row.grid(row=3, column=0)
+    # fourth_row.grid_propagate(False)
+    # fourth_row.columnconfigure(0, weight=2)
+    # fourth_row.columnconfigure(1, weight=1)
+    # fourth_row.columnconfigure(2, weight=2)
+    # fourth_row.rowconfigure(0, weight=1)
+    # fourth_row.rowconfigure(1, weight=1)
+    # fourth_row.rowconfigure(2, weight=1)
 
     ## FIFTH ROW
-    fifth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/40, width=window.winfo_width(), bg="orange")
+    fifth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/40, width=window.winfo_width())
     fifth_row.grid(row=4, column=0)
     fifth_row.grid_propagate(False)
     fifth_row.columnconfigure(0, weight=1)
@@ -593,7 +587,7 @@ def main():
     com.grid(row=1, column=1)
 
     ## SIXTH ROW
-    sixth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width(), bg="black")
+    sixth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
     sixth_row.grid(row=5, column=0)
     sixth_row.columnconfigure(0, weight=1)
     sixth_row.columnconfigure(1, weight=1)
