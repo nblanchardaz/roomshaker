@@ -165,15 +165,9 @@ class sport:
 
     # Function to upload filter parameters over COM port
     def upload_filters(self, values):
-        
-        # Convert data to bytes
-        raw = bytearray()
-        for val in values:
-            raw.extend(struct.pack('f', val))
 
-        # Split data into two USB packets
-        # The maximum FS USB packet size is 64 bytes. We need to
-        # send 4 * 4 * 5 = 80 bytes. By pre-emptively
+        # Split data into one USB packet per filter
+        # The maximum FS USB packet size is 64 bytes. By pre-emptively
         # splitting the data into two packets, we can control
         # when/where the data is split and insert our own
         # headers.
@@ -182,25 +176,34 @@ class sport:
         # BYTE 1: STARTING FILTER INDEX
         # BYTES 2 to n: FILTER PARAMETERS
 
-        # Filter parameters are stored in an array of size 20.
-        # {b0 b1 b2 a0 a1}, maximum of 4 stages
-        # ...
+        # Number of USB packets we need to send
+        num_filters = math.floor(len(values) / 5)
 
-        # First packet transmission
-        first_msg = bytearray()
-        first_msg.extend(b'\x0A')       # 10 parameters in first message (2 filters)
-        first_msg.extend(b'\x00')       # Start at the 0th index   
-        first_msg.extend(raw[0:40])     # Filter parameters
-        first_msg.extend(b'\xAA')       # Ending the message with 0xAA indicates to NOT update the stored filter parameters yet, because more are coming
-        self.ser.write(first_msg)
+        # For each packet:
+        for i in range(6):
+            filter_coefs = values[i*5:i*5+5]        # Extract filter coefficients for this packet
+            if (i == (num_filters-1)):
+                self.send_packet(filter_coefs, i, True)   # If this is the last filter
+            else:
+                self.send_packet(filter_coefs, i, False)  # If this is not the last filter
 
-        # Second packet transmission
-        second_msg = bytearray()
-        second_msg.extend(b'\x0A')      # 10 parameters in second message (2 filters)
-        second_msg.extend(b'\x28')      # Start at the 40th index   
-        second_msg.extend(raw[40:80])   # Filter parameters
-        second_msg.extend(b'\xBB')      # Ending the message with 0xBB indicates to update the stored filter parameters, because all have been sent
-        self.ser.write(second_msg)      
+    def send_packet(self, values, filter_index, last=False):
+
+        # Convert data to bytes
+        raw = bytearray()
+        for val in values:
+            raw.extend(struct.pack('f', val))
+
+        msg = bytearray()
+        msg.extend(b'\x05')                         # 5 parameters in a single filter
+        msg.extend(bytes([filter_index*5]))         # Start at the nth index, calculated using the filter index 
+        msg.extend(raw)                             # Filter parameters
+
+        if(last):
+            msg.extend(b'\xBB')      # Ending the message with 0xBB indicates to update the stored filter parameters, because all have been sent
+        else:
+            msg.extend(b'\xAA')       # Ending the message with 0xAA indicates to NOT update the stored filter parameters yet, because more are coming
+        self.ser.write(msg)
 
     def enable_autoeq(self):
         
@@ -570,7 +573,7 @@ def main():
     # fifth_row.update()
 
     # Upload Filters
-    upload = create_widget(fifth_row, tk.Button, text="Upload Filters", command=lambda:_sport.upload_filters(get_values(entries)), font=("Helvetica", 12, "bold"))
+    upload = create_widget(fifth_row, tk.Button, text="Upload Filters", command=lambda:_sport.upload_filters(get_vals(entries)), font=("Helvetica", 12, "bold"))
     upload["state"] = "disabled"
     upload.grid(row=1, column=2)
 
