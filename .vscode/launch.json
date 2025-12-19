@@ -11,5 +11,13 @@
             "program": "${file}",
             "console": "integratedTerminal"
         }
+        {
+            "name": "Run GUI (external terminal)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "externalTerminal",
+            "internalConsoleOptions": "neverOpen"
+        }
     ]
 }

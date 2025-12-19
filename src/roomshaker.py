@@ -21,6 +21,9 @@
 ## DEPENDENCIES
 ###############################################################################
 
+import signal
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+signal.signal(signal.SIGBREAK, signal.SIG_IGN)
 
 import tkinter as tk
 from tkinter import *
@@ -34,13 +37,20 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from scipy import signal
+from scipy import signal as sp_signal
 import numpy as np
 import math
-import time
-import threading
 import csv
 from ctypes import windll
+
+
+###############################################################################
+## Make sure these match the firmware config of the RoomShaker embedded device
+###############################################################################
+
+
+num_filters=6
+num_parameters=5
 
 
 ###############################################################################
@@ -139,7 +149,7 @@ class floader:
 # Class to interact with the serial port
 class sport:
 
-    ser = NONE
+    ser = None
 
     # Function to enumerate available COM ports
     def open_com_port(self, cbox):
@@ -180,7 +190,7 @@ class sport:
         num_filters = math.floor(len(values) / 5)
 
         # For each packet:
-        for i in range(6):
+        for i in range(num_filters):
             filter_coefs = values[i*5:i*5+5]        # Extract filter coefficients for this packet
             if (i == (num_filters-1)):
                 self.send_packet(filter_coefs, i, True)   # If this is the last filter
@@ -195,8 +205,8 @@ class sport:
             raw.extend(struct.pack('f', val))
 
         msg = bytearray()
-        msg.extend(b'\x05')                         # 5 parameters in a single filter
-        msg.extend(bytes([filter_index*5]))         # Start at the nth index, calculated using the filter index 
+        msg.extend(bytes([len(values)]))              # 5 parameters in a single filter
+        msg.extend(bytes([filter_index]))         # Start at the nth index, calculated using the filter index 
         msg.extend(raw)                             # Filter parameters
 
         if(last):
@@ -274,10 +284,10 @@ class plot:
         # Create 4 biquads
         try:
             # NOTE: all a coefficients are negated relative to what the Room Shaker gets; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
-            W1, H1 = signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
-            W2, H2 = signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=int(self.fs/2), fs=self.fs)
-            W3, H3 = signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=int(self.fs/2), fs=self.fs)
-            W4, H4 = signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=int(self.fs/2), fs=self.fs)
+            W1, H1 = sp_signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
+            W2, H2 = sp_signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=int(self.fs/2), fs=self.fs)
+            W3, H3 = sp_signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=int(self.fs/2), fs=self.fs)
+            W4, H4 = sp_signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=int(self.fs/2), fs=self.fs)
         except Exception as e:
             print("ERROR: Are all 20 coefficients being passed to the plot.update() function? " + e)
             W1, H1 = 0, 0
@@ -476,10 +486,6 @@ def main():
     entries = []    # List of lists
     load_buttons = []   # List
 
-    # Number of filters and parameters per filter
-    num_filters=6
-    num_parameters=5
-
     # Configure rows to support the correct number of filters
     third_row.rowconfigure(0, weight=1)
     for i in range(1, num_filters+3):
@@ -498,7 +504,7 @@ def main():
             e = create_widget(third_row, tk.Entry, width=10)
             e.grid(row=row, column=j+2)
             entries[i].append(e)
-        e = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda:_floader.browse_files(is_txt=True, is_single=True, filter_index=i), font=("Helvetica", 10, "bold"))
+        e = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda n=i:_floader.browse_files(is_txt=True, is_single=True, filter_index=n), font=("Helvetica", 10, "bold"))
         e.grid(row=row, column=num_parameters+2)
         load_buttons.append(e)
 
@@ -610,10 +616,6 @@ def main():
 
     # Checking for received data
     _sport.receive_response(output)
-
-    # Thread
-    # t1 = threading.Thread(target=plot_loop)
-    # t1.start()
 
     window.after(250, _plot.update, entries)
 
