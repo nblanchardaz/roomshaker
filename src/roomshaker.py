@@ -41,6 +41,7 @@ from scipy import signal as sp_signal
 import numpy as np
 import math
 import csv
+import copy
 from ctypes import windll
 
 
@@ -142,7 +143,10 @@ class floader:
     def enable_super_bass(self, num_filters):
         params = []
         for i in range(num_filters):
-            params.append(create_low_shelf())  
+            if (i < 4):
+                params.append(create_low_shelf())
+            else:
+                params.append(create_allpass())
         self.set_all_fields(params)
 
 
@@ -191,11 +195,11 @@ class sport:
 
         # For each packet:
         for i in range(num_filters):
-            filter_coefs = values[i*5:i*5+5]        # Extract filter coefficients for this packet
+            filter_coefs = values[i]                        # Extract filter coefficients for this packet
             if (i == (num_filters-1)):
-                self.send_packet(filter_coefs, i, True)   # If this is the last filter
+                self.send_packet(filter_coefs, i, True)     # If this is the last filter
             else:
-                self.send_packet(filter_coefs, i, False)  # If this is not the last filter
+                self.send_packet(filter_coefs, i, False)    # If this is not the last filter
 
     def send_packet(self, values, filter_index, last=False):
 
@@ -270,36 +274,39 @@ class plot:
         # Check for a change
         if (self.previous_coefs == values):
             window.after(250, self.update, entries)
-            self.previous_coefs = list(values)
+            self.previous_coefs = copy.deepcopy(values)
             return
             
         # Store for next check
-        self.previous_coefs = list(values)
+        self.previous_coefs = copy.deepcopy(values)
         
         # Negate all a coefficients to reverse signs on a-coefficients; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
-        for index in range(len(values)):
-            if (index % 5 == 3 or index % 5 == 4):
-                values[index] = -1*values[index]
+        for i in range(num_filters):
+            values[i][3] = -1 * values[i][3]
+            values[i][4] = -1 * values[i][4]
 
         # Create 4 biquads
+        W = []
+        H = []
         try:
             # NOTE: all a coefficients are negated relative to what the Room Shaker gets; this is due to a mismatch in difference equation forms between the signal.freqz library and the CMSIS-DSP library
-            W1, H1 = sp_signal.freqz(b=values[0:3], a=([1.0] + values[3:5]), worN=int(self.fs/2), fs=self.fs)
-            W2, H2 = sp_signal.freqz(b=values[5:8], a=([1.0] + values[8:10]), worN=int(self.fs/2), fs=self.fs)
-            W3, H3 = sp_signal.freqz(b=values[10:13], a=([1.0] + values[13:15]), worN=int(self.fs/2), fs=self.fs)
-            W4, H4 = sp_signal.freqz(b=values[15:18], a=([1.0] + values[18:20]), worN=int(self.fs/2), fs=self.fs)
+            for i in range(num_filters):
+                W_temp, H_temp = sp_signal.freqz(b=values[i][0:3], a=([1.0] + values[i][3:5]), worN=int(self.fs/2), fs=self.fs)
+                W.append(W_temp)
+                H.append(H_temp)
         except Exception as e:
             print("ERROR: Are all 20 coefficients being passed to the plot.update() function? " + e)
-            W1, H1 = 0, 0
-            W2, H2 = 0, 0
-            W3, H3 = 0, 0
-            W4, H4 = 0, 0
+            W = [0]
+            H = [0]
+            H_all = H
 
-        # Cascade all 4 biquads
-        H = H1 * H2 * H3 * H4                                                   # Multiply frequency responses
-        magnitude_db = 20 * np.log10(abs(H))                                    # Extract gain in dB
-        phase_degrees = np.unwrap(np.angle(H, deg=False)) * 360/( 2*math.pi)    # Extract phase in degrees
-        freq_degrees = W1
+        # Cascade all biquads
+        H_all = H[0]
+        for i in range(1, num_filters):
+            H_all = H_all * H[i]                                                    # Multiply frequency responses
+        magnitude_db = 20 * np.log10(abs(H_all))                                    # Extract gain in dB
+        phase_degrees = np.unwrap(np.angle(H_all, deg=False)) * 360/( 2*math.pi)    # Extract phase in degrees
+        freq_degrees = W[0]
 
         # Clear previously plotted curve
         self.ax[0].clear()
@@ -311,7 +318,7 @@ class plot:
         # self.ax[0].set_xlabel("Frequency (Hz)")
         self.ax[0].set_ylabel("Gain (dB)")
         # self.ax[0].xaxis.set_major_locator(mticker.LogLocator(base=10.0, numticks=5))
-        self.ax[0].axis([1, 400, -15, 15])
+        self.ax[0].axis([1, 400, -20, 20])
         self.ax[0].locator_params(axis='y', nbins=6)
         # plt.tight_layout()
         self.canvas.draw()
@@ -327,10 +334,6 @@ class plot:
         self.canvas.draw()
 
         window.after(250, self.update, entries)
-
-# def plot_loop():
-#     while 1:
-#         _plot.update()
 
 def hz_to_rads(hz):
     return (hz * math.pi / 180)
@@ -360,12 +363,16 @@ def create_low_shelf(FS=48076, F0=50, SHELF_GAIN_dB=3, S=1):
     # Normalize
     return [b0/a0, b1/a0, b2/a0, a1/a0, a2/a0]
 
+def create_allpass():
+    return [1.0, 0.0, 0.0, 0.0, 0.0]
+
 def get_vals(entries):
     # Retrieve values from Tkinter fields
     values = []
     for i in range(len(entries)):
+        values.append([])
         for j in range(len(entries[i])):
-            values.append(float(entries[i][j].get()))
+            values[i].append(float(entries[i][j].get()))
 
     return values
 
