@@ -2,3 +2,4 @@ release/
 dist/
 build/
 roomshaker.spec
+*.ps1
