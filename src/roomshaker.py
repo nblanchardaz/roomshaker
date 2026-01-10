@@ -133,6 +133,7 @@ class floader:
                     row_data.append(word)
                 data_list.append(row_data)
                 row_data = []
+                
 
         if (is_single==True):
             self.set_single_filter_fields(data_list[0], self.fields[filter_index])
@@ -191,7 +192,7 @@ class sport:
         # BYTES 2 to n: FILTER PARAMETERS
 
         # Number of USB packets we need to send
-        num_filters = math.floor(len(values) / 5)
+        num_filters = len(values)
 
         # For each packet:
         for i in range(num_filters):
