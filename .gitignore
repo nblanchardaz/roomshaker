@@ -3,3 +3,4 @@ dist/
 build/
 roomshaker.spec
 *.ps1
+make_release.bat
