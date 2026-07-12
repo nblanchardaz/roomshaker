@@ -256,7 +256,7 @@ class plot:
         font_scale = 1 / scaling
 
         # Figure
-        plt.rcParams.update({'font.size': 10})
+        plt.rcParams.update({'font.size': 16})
         screen_dpi = window.winfo_fpixels('1i')
         self.fig, self.ax = plt.subplots(nrows=2, ncols=1, sharex=True, dpi=screen_dpi*font_scale)
 
@@ -417,7 +417,7 @@ def main():
     screenheight = window.winfo_screenheight()
     screenwidth = window.winfo_screenwidth()
     window.minsize(int(0.4*screenwidth), int(0.7*screenheight))
-    window.geometry(f"{int(0.7*screenwidth)}x{int(0.7*screenheight)}")
+    window.geometry(f"{int(0.5*screenwidth)}x{int(0.7*screenheight)}")
     window.resizable(True, True)
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
