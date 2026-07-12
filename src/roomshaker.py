@@ -60,9 +60,12 @@ num_parameters=5
 
 
 try:
-    windll.shcore.SetProcessDpiAwareness(1)
+    windll.shcore.SetProcessDpiAwarenessContext(-4)  # PER_MONITOR_AWARE_V2 (Win10 1703+)
 except Exception:
-    pass
+    try:
+        windll.shcore.SetProcessDpiAwareness(2)  # fallback: per-monitor v1
+    except Exception:
+        pass
 
 
 ###############################################################################
@@ -247,16 +250,21 @@ class plot:
 
     def create(self, parent, toolbar_true, fields):
 
-        # Figure
-        plt.rcParams.update({'font.size': 8})
+        # Screen scaling
         screen_dpi = window.winfo_fpixels('1i')
-        self.fig, self.ax = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(parent.winfo_width()/(screen_dpi), parent.winfo_height()/(screen_dpi)), dpi=screen_dpi)
+        scaling = window.tk.call('tk', 'scaling')
+        font_scale = 1 / scaling
+
+        # Figure
+        plt.rcParams.update({'font.size': 10})
+        screen_dpi = window.winfo_fpixels('1i')
+        self.fig, self.ax = plt.subplots(nrows=2, ncols=1, sharex=True, dpi=screen_dpi*font_scale)
 
         # Place in tkinter window
         self.fig.set_layout_engine('constrained')
-        self.canvas = FigureCanvasTkAgg(self.fig, master = parent)  
+        self.canvas = FigureCanvasTkAgg(self.fig, master = parent)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True) 
         self.canvas.draw()
-        self.canvas.get_tk_widget().pack(pady=0)
 
         # Optional: Add toolbar
         if (toolbar_true):
@@ -404,20 +412,23 @@ _floader = floader()
 def main():
 
     ## MAIN WINDOW
+    dpi = window.winfo_fpixels('1i')
+    window.tk.call('tk', 'scaling', dpi / 72.0)
     screenheight = window.winfo_screenheight()
     screenwidth = window.winfo_screenwidth()
-    window.minsize(int(0.7*screenwidth), int(0.7*screenheight))
-    window.maxsize(int(0.7*screenwidth), int(0.7*screenheight))
+    window.minsize(int(0.4*screenwidth), int(0.7*screenheight))
+    window.geometry(f"{int(0.7*screenwidth)}x{int(0.7*screenheight)}")
+    window.resizable(True, True)
     window.title("ROOM SHAKER")
     icon = PhotoImage(file = os.path.join(os.path.dirname(__file__), "imgs\\icon.png"))
     window.iconphoto(False, icon)
     window.update()
-    window.rowconfigure(0, weight=1)
-    window.rowconfigure(1, weight=1)
+    window.rowconfigure(0, weight=0)
+    window.rowconfigure(1, weight=0)
     window.rowconfigure(2, weight=1)
-    window.rowconfigure(3, weight=1)
-    window.rowconfigure(4, weight=1)
-    window.rowconfigure(5, weight=1)
+    window.rowconfigure(3, weight=0)
+    window.rowconfigure(4, weight=0)
+    window.rowconfigure(5, weight=3)
     window.columnconfigure(0, weight=1)
 
     ## FIRST ROW
@@ -455,17 +466,17 @@ def main():
     ## THIRD ROW
     third_row = create_widget(window, tk.Frame, height=10*window.winfo_height()/20, width=window.winfo_width()) # bg="green"
     third_row.grid(row=2, column=0, sticky="nsew")
-    third_row.columnconfigure(0, weight=1)
-    third_row.columnconfigure(1, weight=1)
-    third_row.columnconfigure(2, weight=1)
-    third_row.columnconfigure(3, weight=1)
-    third_row.columnconfigure(4, weight=1)
-    third_row.columnconfigure(5, weight=1)
-    third_row.columnconfigure(6, weight=1)
-    third_row.columnconfigure(7, weight=1)
-    third_row.columnconfigure(8, weight=1)
+    third_row.columnconfigure(0, weight=1) # Empty spacing column
+    third_row.columnconfigure(1, weight=0)
+    third_row.columnconfigure(2, weight=0)
+    third_row.columnconfigure(3, weight=0)
+    third_row.columnconfigure(4, weight=0)
+    third_row.columnconfigure(5, weight=0)
+    third_row.columnconfigure(6, weight=0)
+    third_row.columnconfigure(7, weight=0)
+    third_row.columnconfigure(8, weight=1) # Empty spacing column
     third_row.columnconfigure(9, weight=20)
-    third_row.columnconfigure(10, weight=1)
+    third_row.columnconfigure(10, weight=1) # Empty spacing column
     third_row.grid_propagate(False)
     third_row.update()
 
@@ -510,7 +521,7 @@ def main():
         entries.append([])
         for j in range(num_parameters):
             e = create_widget(third_row, tk.Entry, width=10)
-            e.grid(row=row, column=j+2)
+            e.grid(row=row, column=j+2, padx=5)
             entries[i].append(e)
         e = create_widget(third_row, tk.Button, text="Load from .txt...", command=lambda n=i:_floader.browse_files(is_txt=True, is_single=True, filter_index=n), font=("Helvetica", 10, "bold"))
         e.grid(row=row, column=num_parameters+2)
@@ -525,7 +536,7 @@ def main():
                 entries[i][j].insert(0, "0.0000000")
 
     # Create frequency response plot
-    freq_plot_container = create_widget(third_row, tk.Frame, bg="pink") # bg="grey"
+    freq_plot_container = create_widget(third_row, tk.Frame) # bg="grey"
     freq_plot_container.grid(row=0, column=9, rowspan=num_filters+3, sticky="nsew")
     freq_plot_container.pack_propagate(False)
     window.update_idletasks()
@@ -605,19 +616,19 @@ def main():
 
     ## SIXTH ROW
     sixth_row = create_widget(window, tk.Frame, height=3*window.winfo_height()/20, width=window.winfo_width())
-    sixth_row.grid(row=5, column=0)
+    sixth_row.grid(row=5, column=0, sticky="nsew")
     sixth_row.columnconfigure(0, weight=1)
-    sixth_row.columnconfigure(1, weight=1)
+    sixth_row.columnconfigure(1, weight=10)
     sixth_row.columnconfigure(2, weight=1)
     sixth_row.rowconfigure(0, weight=1)
-    sixth_row.rowconfigure(1, weight=1)
+    sixth_row.rowconfigure(1, weight=10)
     sixth_row.rowconfigure(2, weight=1)
     sixth_row.grid_propagate(False)
     # sixth_row.update()
 
     # Text box
     output = create_widget(sixth_row, tk.Text, height=6, width=100)
-    output.grid(row=1, column=1)
+    output.grid(row=1, column=1, sticky="nsew")
 
     # Store entry fields for file loader
     _floader.store_fields(fields=entries)
